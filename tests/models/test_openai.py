@@ -38,7 +38,7 @@ def test_openai_basic():
     lm += f"""\
 5,6,7"""
     lm += f"""{gen(max_tokens=1, suffix=nl)}aaaaaa"""
-    assert str(lm)[-5:] == "aaaaa"
+    assert str(lm).endswith("aaaaa")
 
 def test_openai_select():
     try:

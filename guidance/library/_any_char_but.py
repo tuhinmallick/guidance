@@ -5,7 +5,7 @@ from .._grammar import byte_range, select
 def any_char_but(lm, forbidden):
     """Allows any char except those in forbidden"""
     # TODO: extend this to support utf-8 encoded multibyte unicode characters
-    forb = sorted(set([ord(x) for x in forbidden]))
+    forb = sorted({ord(x) for x in forbidden})
     start = 0
     ranges = []
     for i in forb:

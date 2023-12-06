@@ -33,7 +33,7 @@ def test_azureai_openai_chat_smoke():
         lm += gen(max_tokens=10, name="text")
         lm += "Pick a number: "
 
-    print(str(lm))
+    print(lm)
     assert len(lm["text"]) > 0
 
 
@@ -47,6 +47,6 @@ def test_azureai_openai_completion_smoke():
     )
     assert isinstance(lm, models.AzureOpenAICompletion)
 
-    result = lm + "What is 2+2?" + gen(max_tokens=10, name="text")
+    result = f"{lm}What is 2+2?" + gen(max_tokens=10, name="text")
     print(f"result: {result['text']}")
     assert len(result["text"]) > 0

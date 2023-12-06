@@ -61,27 +61,25 @@ def gen(lm, name=None, *, max_tokens=1000, list_append=False, regex=None,
     # This needs to be here for streaming
     # if name is not None and not list_append:
     #     lm[name] = ""
-    
-    # define the generation pattern
-    if regex is not None:
-        pattern = regex_grammar(regex)
-    else:
-        pattern = zero_or_more(any_char())
 
+    # define the generation pattern
+    pattern = zero_or_more(any_char()) if regex is None else regex_grammar(regex)
     # define any capture group
     if name is not None:
-        pattern = capture(pattern, name="__LIST_APPEND:" + name if list_append else name)
-    
+        pattern = capture(
+            pattern, name=f"__LIST_APPEND:{name}" if list_append else name
+        )
+
     # limit the number of tokens
     pattern = token_limit(pattern, max_tokens)
-    
+
     # define the stop pattern
     if stop is False or len(stop + stop_regex) == 0:
         stop_pattern = ''
     else:
         stop_pattern = select(stop + stop_regex)
         if save_stop_text is True:
-            save_stop_text = str(name) + "_stop_text"
+            save_stop_text = f"{str(name)}_stop_text"
         if isinstance(save_stop_text, str):
             stop_pattern = capture(stop_pattern, name=save_stop_text)
         stop_pattern = commit_point(stop_pattern, hidden=True)
@@ -107,7 +105,7 @@ def gen(lm, name=None, *, max_tokens=1000, list_append=False, regex=None,
     elif n == 1:
         lm += with_temperature(pattern + stop_pattern + suffix, temperature)
 
-    logger.debug(f'finish gen')
+    logger.debug('finish gen')
     return lm
 
 
@@ -135,12 +133,12 @@ button_el.innerHTML = (((i+1) % TOTALCOUNT) + 1)  + "/" + TOTALCOUNT;
 cycle_IDVAL(this);'''.replace("IDVAL", id).replace("TOTALCOUNT", str(total_count)).replace("\n", "")
     out = f'''<div style='background: rgba(255, 255, 255, 0.0); border-radius: 4px 0px 0px 4px; border: 1px solid {color}; border-right: 0px; padding-left: 3px; padding-right: 3px; user-select: none; color: {color}; display: inline; font-weight: normal; cursor: pointer' onClick='{click_script}'>1/{total_count}</div>'''
     out += f"<div style='display: inline;' id='{id}_0'>"
-    return "<||_html:" + out + "_||>"
+    return f"<||_html:{out}_||>"
 
 def click_loop_mid(id, index, echo):
     alpha = 1.0 if not echo else 0.5
     out = f"</div><div style='display: none; opacity: {alpha}' id='{id}_{index}'>"
-    return "<||_html:" + out + "_||>"
+    return f"<||_html:{out}_||>"
 
 @guidance
 def gen_line(lm, *args, **kwargs):

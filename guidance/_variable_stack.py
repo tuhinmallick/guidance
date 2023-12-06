@@ -52,11 +52,10 @@ class VariableStack:
                         next_pos = self["extract_function_call"](curr_pos).__name__
                     elif isinstance(curr_pos, str) and var_part == "__kwdefaults__":
                         next_pos = self["extract_function_call"](curr_pos).__kwdefaults__
+                    elif isinstance(var_part, str) and hasattr(curr_pos, var_part):
+                        next_pos = getattr(curr_pos, var_part)
                     else:
-                        if isinstance(var_part, str) and hasattr(curr_pos, var_part):
-                            next_pos = getattr(curr_pos, var_part)
-                        else:
-                            next_pos = curr_pos[var_part]
+                        next_pos = curr_pos[var_part]
                     next_found = True
                 except (KeyError, AttributeError, TypeError):
                     next_found = False
@@ -67,13 +66,13 @@ class VariableStack:
                     break
             if found:
                 return curr_pos
-        
+
         # fall back to pulling from the llm namespace
         if not name.startswith("llm."):
-            return self.get("llm." + name, default_value)
-        
+            return self.get(f"llm.{name}", default_value)
+
         if default_value is KeyError:
-            raise KeyError("`" + name + "` was not found in the program's variables!")
+            raise KeyError(f"`{name}` was not found in the program's variables!")
         return default_value # variable not found
 
     def __contains__(self, name):
@@ -110,7 +109,7 @@ class VariableStack:
                     next_found = True
                 except KeyError:
                     next_found = False
-                
+
                 if next_found:
                     if part == parts[-1]:
                         changed = curr_pos[var_part] != value
@@ -127,9 +126,11 @@ class VariableStack:
             if found:
                 break
         if not found:
-            assert len(parts) == 1, "Can't set a property of a non-existing variable: " + key
+            assert (
+                len(parts) == 1
+            ), f"Can't set a property of a non-existing variable: {key}"
             self._stack[0][key] = value
-        
+
         # if we changed the _prefix variable, update the display
         if changed and key == "@raw_prefix" and not self.get("@no_display", None):
             self._executor.program.update_display()

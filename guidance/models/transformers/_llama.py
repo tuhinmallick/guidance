@@ -7,7 +7,7 @@ class LlamaChat(TransformersChat, Llama):
 
     def system(self):
         """Patch up the system command to convert normal system role structure into Llama structure (nested in the first user message)."""
-        self._system_prefex = "[INST] " if str(self) == "" else ""
+        self._system_prefex = "[INST] " if not str(self) else ""
         out = super().system()
         delattr(self, "_system_prefex")
         return out
@@ -16,10 +16,7 @@ class LlamaChat(TransformersChat, Llama):
         if role_name == "system":
             return self._system_prefex + "<<SYS>>\n"
         elif role_name == "user":
-            if str(self).endswith("\n<</SYS>>\n\n"):
-                return "" # we don't need to start anything if we are starting with a top level unnested system tag
-            else:
-                return "[INST] "
+            return "" if str(self).endswith("\n<</SYS>>\n\n") else "[INST] "
         else:
             return " "
     

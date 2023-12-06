@@ -24,9 +24,9 @@ class Function():
 
     def __str__(self):
         '''Creates a string tag that can be used to retrieve this object.'''
-    
+
         # save the call in our call pool, ready to be run when it is attached to an LM object
-        str_id = str(id(self))
+        str_id = id(self)
         if str_id not in _call_pool:
             _call_pool[str_id] = self
 
@@ -49,15 +49,13 @@ class StatefulFunction(Function):
         # if we are joining with a string we use the string representation for ourselves
         if isinstance(other, str):
             return str(self) + other
-        
+
         def __add__(model):
             model = self(model)
             if model is None:
                 raise Exception(f"The guidance function `{self.f.__name__}` did not return a model object! You need to return an updated model object at the end of your guidance function.")
-            if isinstance(other, StatelessFunction):
-                return model + other
-            else:
-                return other(model)
+            return model + other if isinstance(other, StatelessFunction) else other(model)
+
         return StatefulFunction(__add__, [], {})
     
     def __radd__(self, other):
@@ -79,34 +77,34 @@ class StatelessFunction(Function):
 
     def __add__(self, value):
 
-        # see if we have a string with calls or a simple string 
-        if isinstance(value, str) or isinstance(value, bytes):
+        # see if we have a string with calls or a simple string
+        if isinstance(value, (str, bytes)):
             if isinstance(value, str) and re.search(_tag_pattern, value):
                 return str(self) + value
             else:
                 value = string(value) 
-        
+
         # see if we can keep building a stateless grammar
         if isinstance(value, StatelessFunction):
             return Join([self, value])
-        
+
         # otherwise we let the stateful object handle things
         else:
             return value.__radd__(self)
     
     def __radd__(self, value):
 
-        # see if we have a string with calls or a simple string 
-        if isinstance(value, str) or isinstance(value, bytes):
+        # see if we have a string with calls or a simple string
+        if isinstance(value, (str, bytes)):
             if isinstance(value, str) and re.search(_tag_pattern, value):
                 return value + str(self)
             else:
                 value = string(value) 
-        
+
         # see if we can keep building a stateless grammar
         if isinstance(value, StatelessFunction):
             return Join([value, self])
-        
+
         # otherwise we let the stateful object handle things
         else:
             return value.__add__(self)
@@ -138,7 +136,7 @@ class StatelessFunction(Function):
         names = {}
         lines = []
         root_name = self._rec_gbnf_string(lines, used_names, names)
-        lines.append("root ::= " + root_name)
+        lines.append(f"root ::= {root_name}")
         return "\n".join(lines)
 
 class Terminal(StatelessFunction):
@@ -429,11 +427,11 @@ class Join(StatelessFunction):
     def __repr__(self, indent="", done=None):
         if done is None:
             done = set()
-        s = self.name.ljust(20) + " <- " + " ".join([v.name for v in self.values])
+        s = f"{self.name.ljust(20)} <- " + " ".join([v.name for v in self.values])
         s += "        " + ("hidden " if self.hidden else "") + ("commit_point " if self.commit_point else "") + (f"capture_name={self.capture_name} " if self.capture_name else "") + (f"max_tokens={self.max_tokens}" if self.max_tokens < 100000 else "") +"\n"
         done.add(self)
         for v in self.values:
-            if v not in done and (isinstance(v, Join) or isinstance(v, Select)):
+            if v not in done and (isinstance(v, (Join, Select))):
                 s += v.__repr__(indent, done)
         return s
 
@@ -461,11 +459,11 @@ class Select(StatelessFunction):
     def __repr__(self, indent="", done=None):
         if done is None:
             done = set()
-        s = self.name.ljust(20) + " <- " + " | ".join([v.name for v in self.values])
+        s = f"{self.name.ljust(20)} <- " + " | ".join([v.name for v in self.values])
         s += "        " + ("hidden " if self.hidden else "") + ("commit_point " if self.commit_point else "") + (f"max_tokens={self.max_tokens}" if self.max_tokens < 100000 else "") +"\n"
         done.add(self)
         for v in self.values:
-            if v not in done and (isinstance(v, Join) or isinstance(v, Select)):
+            if v not in done and (isinstance(v, (Join, Select))):
                 s += v.__repr__(indent, done)
         return s
 
@@ -490,22 +488,22 @@ def select(options, name=None, list_append=False, recurse=False, skip_checks=Fal
         for i, value in enumerate(options):
             assert not isinstance(value, StatefulFunction), "You cannot select between stateful functions in the current guidance implementation!"
             assert not isinstance(value, types.FunctionType), "Did you pass a function without calling it to select? You need to pass the results of a called guidance function to select."
-            if isinstance(value, int) or isinstance(value, float):
+            if isinstance(value, (int, float)):
                 options[i] = str(value)
 
     # set up list append var saving if requested
     if list_append:
-        name = "__LIST_APPEND:" + name
+        name = f"__LIST_APPEND:{name}"
 
-    if recurse:
-        node = Select([], capture_name=name, recursive=True)
-        node.values = [node + v for v in options if v != ""] + options
-        return node
-    else:
-        if len(options) == 1 and name is None:
-            return options[0]
-        else:
-            return Select(options, capture_name=name, recursive=False)
+    if not recurse:
+        return (
+            options[0]
+            if len(options) == 1 and name is None
+            else Select(options, capture_name=name, recursive=False)
+        )
+    node = Select([], capture_name=name, recursive=True)
+    node.values = [node + v for v in options if v != ""] + options
+    return node
         
 def byte_range(low, high):
     return ByteRange(low + high)
@@ -575,28 +573,25 @@ _null_grammar = string('')
 def str_to_grammar(value):
     is_id = False
     parts = re.split(_tag_pattern, value)
-    
-    # we have no embedded objects
+
     if len(parts) == 1:
         return string(value)
-    
-    # if we have embedded objects we have to convert the string to a grammar tree
-    else:
-        partial_grammar = _null_grammar
+
+    partial_grammar = _null_grammar
         # lm.suffix = ""
-        for i,part in enumerate(parts):
-            # if i < len(parts) - 1:
-            #     lm.suffix = parts[i+1]
-            if is_id:
-                call = _call_pool[part]
-                if isinstance(call, StatelessFunction):
-                    partial_grammar += _call_pool[part]
-                else:
-                    partial_grammar = StatefulFunction(lambda lm, g, call: call(lm + g), partial_grammar, _call_pool[part])
-                    # lm += partial_grammar
-                    # lm = _call_pool[part](lm)
-                    # partial_grammar = _null_grammar
-            elif part != "":
-                partial_grammar += string(part)
-            is_id = not is_id
+    for part in parts:
+        # if i < len(parts) - 1:
+        #     lm.suffix = parts[i+1]
+        if is_id:
+            call = _call_pool[part]
+            if isinstance(call, StatelessFunction):
+                partial_grammar += _call_pool[part]
+            else:
+                partial_grammar = StatefulFunction(lambda lm, g, call: call(lm + g), partial_grammar, _call_pool[part])
+                # lm += partial_grammar
+                # lm = _call_pool[part](lm)
+                # partial_grammar = _null_grammar
+        elif part != "":
+            partial_grammar += string(part)
+        is_id = not is_id
     return partial_grammar
