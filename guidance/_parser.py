@@ -32,7 +32,7 @@ class EarleyItem:
             for i,v in enumerate(self.values):
                 if self.pos == i:
                     rs += "•"
-                rs += v.name + " "
+                rs += f"{v.name} "
             if self.pos == len(self.values):
                 rs += "•"
         elif isinstance(self.node, Select):
@@ -45,7 +45,7 @@ class EarleyItem:
                 rs += "•"
         else:
             assert False
-        return s + f"{rs:40} ({self.start}) {'nullable' if self.node.nullable else ''}"
+        return f"{s}{rs:40} ({self.start}) {'nullable' if self.node.nullable else ''}"
 
 class EarleyCommitParser:
     def __init__(self, grammar):
@@ -195,10 +195,10 @@ class EarleyCommitParser:
         '''Checks if the parser has completely matched the grammar.'''
         if self.shadow_pos != self.state_set_pos:
             return False
-        for item in self.state_sets[self.state_set_pos]:
-            if item.node == self.grammar and item.pos == len(item.values):
-                return True
-        return False
+        return any(
+            item.node == self.grammar and item.pos == len(item.values)
+            for item in self.state_sets[self.state_set_pos]
+        )
     
     def shadow_rewind(self, new_pos):
         if new_pos == self.state_set_pos:
@@ -277,12 +277,16 @@ class EarleyCommitParser:
         self.shadow_pos += 1
         self._inner_loop(self.state_set_pos)
 
-        # look for a commit point node
-        commit_point = None
-        for item in self.state_sets[self.state_set_pos]:
-            if item.node.commit_point and item.pos == len(item.values) or (item.pos > 0 and item.values[item.pos-1].commit_point):
-                commit_point = item
-                break # TODO: consider how we might need to prioritize multiple commit point nodes (an uncommon scenario I think)
+        commit_point = next(
+            (
+                item
+                for item in self.state_sets[self.state_set_pos]
+                if item.node.commit_point
+                and item.pos == len(item.values)
+                or (item.pos > 0 and item.values[item.pos - 1].commit_point)
+            ),
+            None,
+        )
         # hidden_start, 
         return commit_point
 
@@ -318,8 +322,7 @@ class EarleyCommitParser:
         # if we are shadow rewound then we just force those bytes again
         if self.shadow_pos < self.state_set_pos:
             mask[self.bytes[self.shadow_pos]] = True
-        
-        # otherwise we compute the valid bytes from the grammar
+
         else:
             valid_items = self.valid_next_bytes()
             for item in valid_items:
@@ -328,7 +331,7 @@ class EarleyCommitParser:
                 elif isinstance(item, ByteRange):
                     mask[item.byte_range[0]:item.byte_range[1]+1] = True
                 else:
-                    raise Exception("Unknown Terminal Type: "  + str(type(item)))
+                    raise Exception(f"Unknown Terminal Type: {str(type(item))}")
         return mask
 
     def __repr__(self, state_sets=None) -> str:
@@ -347,7 +350,7 @@ class EarleyCommitParser:
                     for i,v in enumerate(state.values):
                         if state.pos == i:
                             rs += "•"
-                        rs += v.name + " "
+                        rs += f"{v.name} "
                     if state.pos == len(state.values):
                         rs += "•"
                 elif isinstance(state.node, Select):
@@ -421,14 +424,12 @@ class EarleyCommitParser:
             # get the child we are trying to match (meaning we are looking for completed early items for this node)
             value = item.values[values_pos]
 
-            # if we have a terminal node we can jump forward that many bytes
-            if isinstance(value, Terminal):
-                item.children[values_pos] = value
-                values_pos += 1
-                state_set_pos += len(value)
-            else:
+            if not isinstance(value, Terminal):
                 break
-            
+
+            item.children[values_pos] = value
+            values_pos += 1
+            state_set_pos += len(value)
         # otherwise we need to try all possible next matching items in the current state set
         # so we loop over every item in the current state set looking for a completed match
         for inner_item in reversed_state_sets[state_set_pos]:
@@ -438,12 +439,11 @@ class EarleyCommitParser:
                 if self._compute_children(inner_item.start, item, reversed_state_sets, values_pos + 1):
                     item.children[values_pos] = inner_item
                     return True
-                    
-        # if we didn't find a child set and this is nullable we can skip this child (since it may not exist if nulled)
-        if value.nullable:
-            if self._compute_children(state_set_pos, item, reversed_state_sets, values_pos + 1):
+
+        if self._compute_children(state_set_pos, item, reversed_state_sets, values_pos + 1):
+            if value.nullable:
                 item.children[values_pos] = None # this child was skipped since it was nullable
                 return True
-        
+
         return False
 

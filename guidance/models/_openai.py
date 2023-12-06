@@ -88,10 +88,7 @@ class OAICompletionMixin(Instruct):
             raise e
 
         for part in generator:
-            if len(part.choices) > 0:
-                chunk = part.choices[0].text or ""
-            else:
-                chunk = ""
+            chunk = part.choices[0].text or "" if len(part.choices) > 0 else ""
             yield chunk.encode("utf8")
 
 class OAIInstructMixin(Instruct):
@@ -111,11 +108,11 @@ class OAIInstructMixin(Instruct):
             stripped_prompt = prompt[:prompt_end]
         else:
             raise Exception("This model cannot handle prompts that don't match the instruct format!")
-        
+
         # make sure you don't try and instruct the same model twice
         if b'<|endofprompt|>' in prompt[prompt_end + len(b'<|endofprompt|>'):]:
             raise Exception("This model has been given two separate instruct blocks, but this is not allowed!")
-        
+
         self._shared_state["not_running_stream"].clear() # so we know we are running
         self._shared_state["data"] = stripped_prompt + b'<|endofprompt|>'# we start with this data
 
@@ -133,10 +130,7 @@ class OAIInstructMixin(Instruct):
             raise e
 
         for part in generator:
-            if len(part.choices) > 0:
-                chunk = part.choices[0].delta.content or ""
-            else:
-                chunk = ""
+            chunk = part.choices[0].delta.content or "" if len(part.choices) > 0 else ""
             yield chunk.encode("utf8")
 
 class OAIChatMixin(Chat):
@@ -163,18 +157,18 @@ class OAIChatMixin(Chat):
                     messages.append({"role": role_name, "content": btext.decode("utf8")})
                     found = True
                     break
-        
+
         self._shared_state["data"] = prompt[:pos]
-        
+
         # Add nice exception if no role tags were used in the prompt.
         # TODO: Move this somewhere more general for all chat models?
-        if messages == []:
+        if not messages:
             raise ValueError(f"The OpenAI model {self.model_name} is a Chat-based model and requires role tags in the prompt! \
             Make sure you are using guidance context managers like `with system():`, `with user():` and `with assistant():` \
             to appropriately format your guidance program for this type of model.")
 
         try:
-                
+
             generator = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
@@ -187,10 +181,7 @@ class OAIChatMixin(Chat):
         except Exception as e: # TODO: add retry logic
             raise e
         for part in generator:
-            if len(part.choices) > 0:
-                chunk = part.choices[0].delta.content or ""
-            else:
-                chunk = ""
+            chunk = part.choices[0].delta.content or "" if len(part.choices) > 0 else ""
             yield chunk.encode("utf8")
 
 class OpenAICompletion(OpenAI, OAICompletionMixin):

@@ -105,9 +105,11 @@ def substring(lm, s):
             state_stack.pop()
             continue
 
-        # If there's an unprocessed child, add it to the stack
-        unprocessed_children = [next_state for next_state in state.next.values() if next_state not in node_cache]
-        if unprocessed_children:
+        if unprocessed_children := [
+            next_state
+            for next_state in state.next.values()
+            if next_state not in node_cache
+        ]:
             state_stack.extend(unprocessed_children)
         else:
             # Once all children are processed, create the node for this state

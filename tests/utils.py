@@ -20,12 +20,10 @@ def get_openai_model(model_name, caching=False, **kwargs):
 
     # we cache the models so lots of tests using the same model don't have to
     # load it over and over again
-    key = model_name+"_"+str(caching)+"_"+str(kwargs)
+    key = f"{model_name}_{str(caching)}_{kwargs}"
     if key not in opanai_model_cache:
         opanai_model_cache[key] = guidance.models.OpenAI(model_name, caching=caching, **kwargs)
-    lm = opanai_model_cache[key]
-
-    return lm
+    return opanai_model_cache[key]
 
 transformers_model_cache = {}
 
@@ -35,7 +33,7 @@ def get_transformers_model(model_name, caching=False, **kwargs):
 
     # we cache the models so lots of tests using the same model don't have to
     # load it over and over again
-    key = model_name+"_"+str(caching)+"_"+str(kwargs)
+    key = f"{model_name}_{str(caching)}_{kwargs}"
     if key not in transformers_model_cache:
         transformers_model_cache[key] = guidance.models.Transformers(model_name, caching=caching, **kwargs)
 
@@ -60,7 +58,7 @@ def get_llama_cpp_model(model_name, caching=False, **kwargs):
 
     # we cache the models so lots of tests using the same model don't have to
     # load it over and over again
-    key = model_name+"_"+str(caching)+"_"+str(kwargs)
+    key = f"{model_name}_{str(caching)}_{kwargs}"
     if key not in llama_cpp_model_cache:
         llama_cpp_model_cache[key] = guidance.models.LlamaCpp(model_name, caching=caching, **kwargs)
 

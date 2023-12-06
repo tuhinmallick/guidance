@@ -21,17 +21,13 @@ class VertexAI(Remote):
     def __init__(self, model, tokenizer=None, echo=True, caching=True, temperature=0.0, top_p=1.0, max_streaming_tokens=None, **kwargs):
         if not is_vertexai:
             raise Exception("Please install the vertexai package using `pip install google-cloud-aiplatform` in order to use guidance.models.VertexAI!")
-        
+
         # if we are called directly (as opposed to through super()) then we convert ourselves to a more specific subclass if possible
         if self.__class__ is VertexAI:
             found_subclass = None
             from .. import vertexai
 
-            if isinstance(model, str):
-                model_name = model
-            else:
-                model_name = self.model_obj._model_id # TODO: is this right?
-
+            model_name = model if isinstance(model, str) else self.model_obj._model_id
             # CodeyCompletion
             if re.match("code-gecko(@[0-9]+)?", model_name):
                 found_subclass = vertexai.CodeyCompletion
@@ -51,13 +47,13 @@ class VertexAI(Remote):
             # PaLM2Chat
             elif re.match("chat-bison(@[0-9]+)?", model_name):
                 found_subclass = vertexai.PaLM2Chat
-            
+
             # convert to any found subclass
             if found_subclass is not None:
                 self.__class__ = found_subclass
                 found_subclass.__init__(self, model, tokenizer=tokenizer, echo=echo, caching=caching, temperature=temperature, max_streaming_tokens=max_streaming_tokens, **kwargs)
                 return # we return since we just ran init above and don't need to run again
-        
+
             # make sure we have a valid model object
             if isinstance(model, str):
                 raise Exception("The model ID you passed, `{model}`, does not match any known subclasses!")
@@ -129,7 +125,7 @@ class VertexAIChat(VertexAI, Chat):
         assistant_start = b'<|im_start|>assistant\n'
         role_end = b'<|im_end|>'
         # system_start_pos = prompt.startswith(system_start)
-        
+
         # find the system text
         system_text = b''
         if prompt.startswith(system_start):
@@ -165,16 +161,16 @@ class VertexAIChat(VertexAI, Chat):
                     content=prompt[pos:pos+end_pos].decode("utf8"),
                 ))
                 pos += end_pos + len(role_end)
-            
+
         self._shared_state["data"] = prompt[:pos]
 
-        assert len(messages) > 0, "Bad chat format! No chat blocks were defined."
+        assert messages, "Bad chat format! No chat blocks were defined."
         assert messages[-1].author == "user", "Bad chat format! There must be a user() role before the last assistant() role."
         assert valid_end, "Bad chat format! You must generate inside assistant() roles."
 
         # TODO: don't make a new session on every call
         last_user_text = messages.pop().content
-        
+
         chat_session = self.model_obj.start_chat(
             context=system_text.decode("utf8"),
             message_history=messages,

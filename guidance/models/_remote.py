@@ -36,32 +36,31 @@ class Remote(Model):
 
             bos_token_id = None
             eos_token_id = tokenizer._special_tokens["<|endoftext|>"]
-        
-        # a transformer tokenizer was given that has a byte_decoder
+
         elif hasattr(tokenizer, "byte_decoder"):
             byte_tokens = []
             for i in range(tokenizer.vocab_size):
-                byte_coded = bytes([tokenizer.byte_decoder[c] for c in tokenizer.convert_ids_to_tokens(i)])
+                byte_coded = bytes(
+                    tokenizer.byte_decoder[c]
+                    for c in tokenizer.convert_ids_to_tokens(i)
+                )
                 byte_tokens.append(byte_coded)
             bos_token_id = tokenizer.bos_token_id
             eos_token_id = tokenizer.eos_token_id
-        
-        # a transformer tokenizer was given with byte_decoder
+
         elif hasattr(tokenizer, "convert_ids_to_tokens"):
             byte_tokens = [bytes(tokenizer.convert_tokens_to_string(['a', tokenizer.convert_ids_to_tokens(i)])[1:], encoding="utf8") for i in range(tokenizer.vocab_size)]
             bos_token_id = tokenizer.bos_token_id
             eos_token_id = tokenizer.eos_token_id
 
-        # a HuggingFace tokenizers tokenizer was given with id_to_token
         elif hasattr(tokenizer, "id_to_token"):
             a_token_ids = tokenizer.encode("a").ids
-            if len(a_token_ids) == 3:
-                bos_token_id = a_token_ids[0]
-                a_id = a_token_ids[1]
-                eos_token_id = a_token_ids[2]
-            else:
+            if len(a_token_ids) != 3:
                 raise Exception("This tokenizer does not seem to have a BOS and EOS, support for this need to be implemented still.")
 
+            bos_token_id = a_token_ids[0]
+            a_id = a_token_ids[1]
+            eos_token_id = a_token_ids[2]
             byte_tokens = [bytes(tokenizer.decode([a_id, i])[1:], encoding="utf8") for i in range(tokenizer.get_vocab_size())]
             for i,b in enumerate(byte_tokens):
                 if b == b'':
@@ -89,7 +88,7 @@ class Remote(Model):
 
         self.max_repeated_calls = 10
         self.timeout = timeout
-        logger.debug(f"finish Remote.__init__")
+        logger.debug("finish Remote.__init__")
 
     def __call__(self, grammar, max_tokens=1000000, n=1, top_p=1, temperature=0.0, ensure_bos_token=True):
         self._shared_state["num_calls_made"] = 0 # reset the number of calls count so we only limit the number of calls within a single grammar execution
@@ -99,19 +98,18 @@ class Remote(Model):
         return not self._shared_state["not_running_stream"].is_set() # wrap double negation (which)
 
     def _start_generator_stream(self, generator):
-        logger.debug(f"start Remote._start_generator_stream")
+        logger.debug("start Remote._start_generator_stream")
         dqueue = self._shared_state["data_queue"]
         first_iteration = True
         try: 
             for chunk in generator:
-                logger.debug(f"Got chunk: " + str(chunk))
+                logger.debug(f"Got chunk: {str(chunk)}")
                 if len(chunk) > 0:
                     dqueue.put(chunk)
                 if self._shared_state["not_running_stream"].is_set() or not first_iteration and time.time() - self._shared_state["last_call"] > self.timeout:
                     break
                 first_iteration = False
-        
-        # we pass any exceptions back to the main thread
+
         except Exception as e:
             self._shared_state["not_running_stream"].set()
             while not dqueue.empty(): 
@@ -157,7 +155,7 @@ class Remote(Model):
 
         if len(token_ids) == 0:
             raise ValueError("token_ids must contain some tokens.")
-        
+
         # compute the prompt bytes
         prompt = b''.join([self.tokens[i] for i in token_ids]) + forced_bytes
 
@@ -173,7 +171,6 @@ class Remote(Model):
                 if token_id is not None:
                     break
 
-            # restart if extending our data will never lead to matching our prompt
             elif not self._shared_state["data"].startswith(prompt) and len(self._shared_state["data"]) >= len(prompt): #not prompt.startswith(self._shared_state["data"]): # len(self._shared_state["data"]) >= len(prompt) or 
 
                 # check the length of the prefix match
@@ -199,7 +196,9 @@ class Remote(Model):
                 for p in parts:
                     if p.startswith(leftover):
                         self._shared_state["data"] = self._shared_state["data"][:match_len] + p
-                        logger.debug(f'automatically adding an end token since it fits the forcing of the grammar')
+                        logger.debug(
+                            'automatically adding an end token since it fits the forcing of the grammar'
+                        )
                         found_match = True
                         break
                 if found_match:
@@ -213,14 +212,14 @@ class Remote(Model):
                 new_bytes = self._shared_state["data_queue"].get_nowait()
                 if isinstance(new_bytes, Exception):
                     raise new_bytes
-                
+
                 # if we are at the end of the generation then we try again allowing for early token stopping
                 if len(new_bytes) == 0:
                     token_id = self._get_next_token(len(prompt), allow_early_stop=True)
                     if token_id is not None:
                         break
                 self._shared_state["data"] += new_bytes
-            
+
             # but if there is nothing and we are not running then we start a stream
             elif self._shared_state["not_running_stream"].is_set():
                 logger.debug("starting a new stream because there is no data to read and no stream running...")
@@ -234,7 +233,7 @@ class Remote(Model):
                     raise new_bytes
                 self._shared_state["data"] += new_bytes
                 self._shared_state["last_call"] = time.time() # reset out call time to allow the data stream to time out if we happen to be done with it
-        
+
         # # if we don't have the next byte of data yet then we wait for it (from the streaming thread)
         # if len(self._shared_state["data"]) == len(prompt):
         #     self._shared_state["data"] += self._shared_state["data"]_queue.get() 
@@ -244,7 +243,7 @@ class Remote(Model):
         # set the logits to the next byte the model picked
         logits = np.ones(len(self.tokens)) * -np.inf
         logits[token_id] = 100
-        
+
         return logits
     
     def _get_next_token(self, pos, allow_early_stop=False):
@@ -255,11 +254,7 @@ class Remote(Model):
             
             # see if we have run out of data
             if pos >= len(data):
-                if allow_early_stop:
-                    return token_id
-                else:
-                    return None
-            
+                return token_id if allow_early_stop else None
             # try and walk down the trie
             next_byte = data[pos:pos+1]
             if trie.has_child(next_byte):

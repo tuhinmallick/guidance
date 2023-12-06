@@ -9,7 +9,7 @@ def test_palm2_instruct():
         pytest.skip("Skipping OpenAI test because we can't load the model!")
 
     with instruction():
-        lm = vmodel + "this is a test about"
+        lm = f"{vmodel}this is a test about"
     lm += gen("test", max_tokens=100)
     assert len(lm["test"]) > 0
 
@@ -22,7 +22,7 @@ def test_palm2_chat():
         pytest.skip("Skipping OpenAI test because we can't load the model!")
 
     with system():
-        lm = vmodel + "You are an always-happy agent no matter what."
+        lm = f"{vmodel}You are an always-happy agent no matter what."
 
     with user():
         lm += "The economy is crashing!"
@@ -41,7 +41,7 @@ def test_palm2_chat():
 
     # second time to make sure cache reuse is okay
     with system():
-        lm = vmodel + "You are an always-happy agent no matter what."
+        lm = f"{vmodel}You are an always-happy agent no matter what."
 
     with user():
         lm += "The economy is crashing!"

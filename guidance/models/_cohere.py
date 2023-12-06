@@ -10,10 +10,10 @@ class Cohere(LiteLLM):
         # get the tokenizer
         if tokenizer is None:
             try:
-                tokenizer = tokenizers.Tokenizer.from_pretrained("Cohere/"+model)
+                tokenizer = tokenizers.Tokenizer.from_pretrained(f"Cohere/{model}")
             except:
                 tokenizer = tokenizers.Tokenizer.from_pretrained("Cohere/command-nightly")
-        
+
         super().__init__(
             model, tokenizer=tokenizer, echo=echo,
             caching=caching, temperature=temperature,

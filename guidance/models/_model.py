@@ -122,7 +122,7 @@ class Model:
         display_out = html.escape(display_out)
         display_out = nodisp_pattern.sub("", display_out)
         display_out = html_pattern.sub(lambda x: html.unescape(x.group(1)), display_out)
-        display_out = "<pre style='margin: 0px; padding: 0px; padding-left: 8px; margin-left: -8px; border-radius: 0px; border-left: 1px solid rgba(127, 127, 127, 0.2); white-space: pre-wrap; font-family: ColfaxAI, Arial; font-size: 15px; line-height: 23px;'>"+display_out+"</pre>"
+        display_out = f"<pre style='margin: 0px; padding: 0px; padding-left: 8px; margin-left: -8px; border-radius: 0px; border-left: 1px solid rgba(127, 127, 127, 0.2); white-space: pre-wrap; font-family: ColfaxAI, Arial; font-size: 15px; line-height: 23px;'>{display_out}</pre>"
         return display_out
     
     def _send_to_event_queue(self, value):
@@ -317,12 +317,10 @@ class Model:
     def __getitem__(self, key):
         if key in self._variables:
             return self._variables[key]
-        
-        # look for named blocks that are still open with the given key as their name
-        else:
-            for context in list(reversed(self.opened_blocks)):
-                if context.name == key:
-                    return format_pattern.sub("", self._state[self.opened_blocks[context][0]:])
+
+        for context in list(reversed(self.opened_blocks)):
+            if context.name == key:
+                return format_pattern.sub("", self._state[self.opened_blocks[context][0]:])
     
     def __contains__(self, item):
         return item in self._variables
@@ -427,9 +425,9 @@ type {function['name']} = (_: {{"""
         
         return self
 
-    def _run_stateless(lm, stateless_function, temperature=0.0, top_p=1.0, n=1):
+    def _run_stateless(self, stateless_function, temperature=0.0, top_p=1.0, n=1):
         assert Model._grammar_only == 0, "We can't run grammar parsing while in context free mode! (for example inside a block closer)"
-        
+
         logger.debug("start Model._run_stateless")
 
         # This needs to be here for streaming
@@ -438,10 +436,12 @@ type {function['name']} = (_: {{"""
 
 
         # replace ModelVariables with their actual values (note we save what we replaced so we can restore it later)
-        replacements = replace_model_variables(stateless_function, lm)
+        replacements = replace_model_variables(stateless_function, self)
 
         # start the generation stream
-        gen_obj = lm(grammar=stateless_function, n=n, temperature=temperature, top_p=top_p)
+        gen_obj = self(
+            grammar=stateless_function, n=n, temperature=temperature, top_p=top_p
+        )
 
         # single generation
         if n == 1:
@@ -452,7 +452,7 @@ type {function['name']} = (_: {{"""
             # last_is_generated = False
             for new_bytes, is_generated, new_bytes_prob, capture_groups, capture_group_log_probs, new_token_count in gen_obj:
                 # convert the bytes to a string (delaying if we don't yet have a valid unicode string)
-                lm.token_count += new_token_count
+                self.token_count += new_token_count
                 new_bytes = delayed_bytes + new_bytes
                 try:
                     new_text = new_bytes.decode("utf8")
@@ -464,17 +464,17 @@ type {function['name']} = (_: {{"""
                 if len(new_bytes) > 0:
                     generated_value += new_text
                     if is_generated:
-                        lm += f"<||_html:<span style='background-color: rgba({165*(1-new_bytes_prob) + 0}, {165*new_bytes_prob + 0}, 0, {0.15}); border-radius: 3px;' title='{new_bytes_prob}'>_||>"
-                    lm += new_text
+                        self += f"<||_html:<span style='background-color: rgba({165 * (1 - new_bytes_prob) + 0}, {165 * new_bytes_prob + 0}, 0, 0.15); border-radius: 3px;' title='{new_bytes_prob}'>_||>"
+                    self += new_text
                     if is_generated:
-                        lm += "<||_html:</span>_||>"
-                
+                        self += "<||_html:</span>_||>"
+
                 # last_is_generated = is_generated
 
                 if len(capture_groups) > 0:
                     for k in capture_groups:
                         v = capture_groups[k]
-                            
+
                         # see if we are in a list_append mode
                         if isinstance(v, list):
                             for i,inner_v in enumerate(v):
@@ -485,13 +485,14 @@ type {function['name']} = (_: {{"""
                                 except UnicodeDecodeError:
                                     pass
 
-                                if k not in lm or not isinstance(lm._variables[k], list):
-                                    lm._variables[k] = []
-                                    lm._variables_log_probs[k] = []
-                                lm._variables[k].append(inner_v)
-                                lm._variables_log_probs[k].append(capture_group_log_probs[k][i])
+                                if k not in self or not isinstance(
+                                    self._variables[k], list
+                                ):
+                                    self._variables[k] = []
+                                    self._variables_log_probs[k] = []
+                                self._variables[k].append(inner_v)
+                                self._variables_log_probs[k].append(capture_group_log_probs[k][i])
 
-                        # ...or standard assignment mode
                         else:
                             # convert to a string if possible
                             # TODO: will need to not just always do this once we support images etc.
@@ -499,19 +500,19 @@ type {function['name']} = (_: {{"""
                                 v = v.decode("utf8") if isinstance(v, bytes) else v
                             except UnicodeDecodeError:
                                 pass
-                            lm._variables[k] = v
-                            lm._variables_log_probs[k] = capture_group_log_probs[k]
+                            self._variables[k] = v
+                            self._variables_log_probs[k] = capture_group_log_probs[k]
 
-            # if len(capture_groups) > 0:
-            #     for k in capture_groups:
-            #         v = capture_groups[k]
-            #         lm[k] = v.decode("utf8") if isinstance(v, bytes) else v
-        
+                # if len(capture_groups) > 0:
+                #     for k in capture_groups:
+                #         v = capture_groups[k]
+                #         lm[k] = v.decode("utf8") if isinstance(v, bytes) else v
+
         unreplace_model_variables(replacements)
 
         logger.debug("finish Model._run_stateless")
 
-        return lm
+        return self
     
     def _get_logits(self, token_ids, forced_bytes):
         '''A fake method designed to be overriden by subclasses.'''
@@ -527,7 +528,7 @@ type {function['name']} = (_: {{"""
         '''This is used to speed up the tokenization of long prompts without using the parser.'''
         token_ids = []
         token_byte_positions = []
-        
+
         # loop trying to decode a new token at each iteration
         pos = 0
         while True:
@@ -542,24 +543,21 @@ type {function['name']} = (_: {{"""
                         valid_pos = -1
                     break
 
-                # check if we can keep going or are at a dead end
-                if trie.has_child(byte_string[pos:pos+1]):
-                    trie = trie.child(byte_string[pos:pos+1])
-                    pos += 1
-
-                    # record the last valid token down this path as we go
-                    if trie.value >= 0:
-                        valid_pos = pos
-                        valid_value = trie.value
-                else:
+                if not trie.has_child(byte_string[pos : pos + 1]):
                     break # we can't go any farther
-            
+
+                trie = trie.child(byte_string[pos:pos+1])
+                pos += 1
+
+                # record the last valid token down this path as we go
+                if trie.value >= 0:
+                    valid_pos = pos
+                    valid_value = trie.value
             if valid_pos == -1:
                 break
-            else:
-                token_ids.append(valid_value)
-                token_byte_positions.append(valid_pos)
-                pos = valid_pos
+            token_ids.append(valid_value)
+            token_byte_positions.append(valid_pos)
+            pos = valid_pos
 
         return token_ids,token_byte_positions
     
@@ -567,7 +565,7 @@ type {function['name']} = (_: {{"""
 
         # compute a joint tokenization
         joint_token_ids = self._joint_tokenize(token_ids)
-        
+
         # see if we need to redo the tokenization
         redo = False
         if len(joint_token_ids) != len(token_ids):
@@ -577,17 +575,17 @@ type {function['name']} = (_: {{"""
                 if token_ids[i] != id:
                     redo = True
                     break
-        
+
         if redo:
             token_ids = joint_token_ids
             last_pos = token_byte_positions[-1]
             token_byte_positions = []
             pos = 0
-            for i,id in enumerate(joint_token_ids):
+            for id in joint_token_ids:
                 pos += len(self.tokens[id])
                 token_byte_positions.append(pos)
             assert token_byte_positions[-1] == last_pos
-        
+
         return token_ids, token_byte_positions
 
     def _clean_duplicate_tokens(self, probs):

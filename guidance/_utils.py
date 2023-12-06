@@ -151,21 +151,16 @@ def strip_multiline_string_indents(f):
     source = textwrap.dedent(inspect.getsource(f))
     blanks = '\n' * f.__code__.co_firstlineno # padd the source so the lines in the file line up for the debugger
     source = blanks + '\n'.join(source.splitlines()[1:]) # remove the decorator first line.
-    
+
     # define the external closure variables so f.__closure__ will match our recompiled version
     if len(f.__code__.co_freevars) > 0:
         raise Exception("You currently must use @guidance(dedent=False) for closure functions (function nested within other functions that reference the outer functions variables)!")
-        lines = source.split("\n")
-        lines[0] = "def __outer__closure_wrap():"
-        lines[1] = "    " + ",".join(f.__code__.co_freevars) + " = " + ",".join("None" for _ in f.__code__.co_freevars)
-        source = "    \n".join(lines) # TODO: this does not quite work because new_code_obj is now the __outer__closure_wrap() function...could be fixed with work...
-
     old_code_obj = f.__code__
     old_ast = ast.parse(source)
     r = _Rewrite()
     r.source_lines = source.split("\n")
-    r.indentation = [None for l in r.source_lines]
-    r.start_counts = [0 for l in r.source_lines]
+    r.indentation = [None for _ in r.source_lines]
+    r.start_counts = [0 for _ in r.source_lines]
     # r._avoid_backslashes = True
     new_ast = r.visit(old_ast)
     new_code_obj = compile(new_ast, old_code_obj.co_filename, 'exec')
@@ -215,7 +210,7 @@ def load(guidance_file):
     elif guidance_file.startswith('http://') or guidance_file.startswith('https://'):
         return requests.get(guidance_file).text
     else:
-        raise ValueError('Invalid guidance file: %s' % guidance_file)
+        raise ValueError(f'Invalid guidance file: {guidance_file}')
 
 
 def chain(programs, **kwargs):
@@ -232,12 +227,10 @@ def chain(programs, **kwargs):
             kwargs["program%d" % i] = program
         else:
             sig = inspect.signature(program)
-            args = ""
-            for name, _ in sig.parameters.items():
-                args += f" {name}={name}"
+            args = "".join(f" {name}={name}" for name, _ in sig.parameters.items())
             fname = find_func_name(program, kwargs)
             kwargs["program%d" % i] = Program("{{set (%s%s)}}" % (fname, args), **{fname: program})
-            # kwargs.update({f"func{i}": program})
+                    # kwargs.update({f"func{i}": program})
     return Program(new_template, **kwargs)
 
 
@@ -249,11 +242,10 @@ def find_func_name(f, used_names):
 
     if prefix not in used_names:
         return prefix
-    else:
-        for i in range(100):
-            fname = f"{prefix}{i}"
-            if fname not in used_names:
-                return fname
+    for i in range(100):
+        fname = f"{prefix}{i}"
+        if fname not in used_names:
+            return fname
 
 
 def strip_markers(s):
@@ -344,13 +336,12 @@ class Trie(object):
             self.children[first_char].insert(s[1:], value)
 
     def values(self, prefix):
-        if prefix == "":
-            sub_values = list(itertools.chain.from_iterable(self.children[k].values(prefix) for k in self.children))
-            if self.value is not None:
-                sub_values.append(self.value)
-            return sub_values
-        else:
+        if prefix != "":
             return self.children[prefix[0]].values(prefix[1:])
+        sub_values = list(itertools.chain.from_iterable(self.children[k].values(prefix) for k in self.children))
+        if self.value is not None:
+            sub_values.append(self.value)
+        return sub_values
 
     def __setitem__(self, key, value):
         if len(key) == 0:
@@ -392,7 +383,7 @@ class ByteTrie(object):
         if len(s) == 0:
             self.value = value
         else:
-            first_byte = s[0:1]
+            first_byte = s[:1]
             if first_byte not in self.children:
                 self.children[first_byte] = ByteTrie(parent=self)
             self.children[first_byte].insert(s[1:], value)
@@ -458,7 +449,7 @@ class JupyterComm():
     def __init__(self, target_id, ipython_handle, callback=None, on_open=None, mode="register"):
         from ipykernel.comm import Comm
 
-        self.target_name = "guidance_interface_target_" + target_id
+        self.target_name = f"guidance_interface_target_{target_id}"
         # print("TARGET NAME", self.target_name)
         self.callback = callback
         self.jcomm = None

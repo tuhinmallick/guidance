@@ -15,7 +15,7 @@ def test_text_closer():
 
 def test_grammar_opener():
     model = models.Mock("<s>open texta")
-    with block(opener="open tex" + any_char()):
+    with block(opener=f"open tex{any_char()}"):
         model += any_char()
     assert str(model) == "open texta"
 
@@ -23,7 +23,7 @@ def test_grammar_closer():
     model = models.Mock(["<s>aclose text", "<s>close text"])
     model += "<s>"
     try:
-        with block(closer=any_char() + "lose text"):
+        with block(closer=f"{any_char()}lose text"):
             model += any_char()
     except:
         return # we expect an exception

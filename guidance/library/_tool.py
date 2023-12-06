@@ -27,10 +27,10 @@ def valid_chars():
 def positional_arg():
     return one_or_more(valid_chars())
 def kwarg():
-    return one_or_more(valid_chars()) + '=' + one_or_more(valid_chars())
+    return f'{one_or_more(valid_chars())}={one_or_more(valid_chars())}'
 
 def basic_func_grammar(name):
-    obj = string(name + '(')
+    obj = string(f'{name}(')
     obj += capture(select([zero_or_more(positional_arg()), ''])
         + select([zero_or_more(kwarg()), '']), name='tool_args')
     obj += string(')')

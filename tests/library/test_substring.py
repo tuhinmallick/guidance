@@ -5,6 +5,6 @@ import re
 
 def test_substring_equal_unconstrained():
     llama2 = get_model("llama_cpp:")
-    lm = llama2 + 'ae galera ' + gen(max_tokens=10, name='test')
-    lm2 = llama2 + 'ae galera ' + substring(lm['test'])
+    lm = f'{llama2}ae galera ' + gen(max_tokens=10, name='test')
+    lm2 = f'{llama2}ae galera ' + substring(lm['test'])
     assert str(lm) == str(lm2)

@@ -149,16 +149,12 @@ class LlamaCppChat(LlamaCpp, Chat):
         if role_name == "user":
 
             # if we follow an auto-nested system role then we are done
-            if self._current_prompt().endswith("\n<</SYS>>\n\n"):
-                return ""
-            else:
-                return "[INST] "
-        
+            return "" if self._current_prompt().endswith("\n<</SYS>>\n\n") else "[INST] "
         elif role_name == "assistant":
             return " "
-        
+
         elif role_name == "system":
-            
+
             # check if we are already embedded at the top of a user role
             if self._current_prompt().endswith("[INST] "):
                 return "<<SYS>>\n"
